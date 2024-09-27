@@ -33,6 +33,7 @@ const sendVerificationEmail = async (user) => {
 };
 
 
+
 // Register User Function
 exports.registerUser = async (req, res) => {
     const { name, email, password, phoneNumber, address, role } = req.body;
@@ -97,5 +98,27 @@ exports.verifyEmail = async (req, res) => {
     } catch (error) {
         console.error("Erreur lors de la vérification de l'e-mail:", error); 
         res.status(500).json({ message: 'Erreur lors de la vérification de l’e-mail.', error: error.message });
+    }
+};
+
+
+// Login User Function
+exports.loginUser = async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user || !user.isVerified) {
+            return res.status(400).json({ message: 'Utilisateur non trouvé ou non vérifié.' });
+        }
+
+        const isMatch = await bcryptjs.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Identifiants invalides.' });
+        }
+        res.status(200).json({ message: 'OTP envoyé à votre e-mail. Veuillez le saisir.' });
+    } catch (error) {
+        console.error("Erreur lors de la connexion :", error);
+        res.status(500).json({ message: 'Erreur lors de la connexion.' });
     }
 };
