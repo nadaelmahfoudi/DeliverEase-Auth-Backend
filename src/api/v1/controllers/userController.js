@@ -34,6 +34,20 @@ const sendVerificationEmail = async (user) => {
 
 
 
+// Function to send OTP email
+const sendOtpEmail = async (user, otp) => {
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: 'Votre code OTP',
+        text: `Votre code OTP est : ${otp}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+
+
 // Register User Function
 exports.registerUser = async (req, res) => {
     const { name, email, password, phoneNumber, address, role } = req.body;
@@ -116,9 +130,49 @@ exports.loginUser = async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Identifiants invalides.' });
         }
+
+        // Generate and send OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate a 6-digit OTP
+        user.otp = otp; // Store OTP in User model
+        user.otpExpires = Date.now() + 5 * 60 * 1000; // Set expiration time for OTP
+        await user.save();
+
+        await sendOtpEmail(user, otp); // Send email with OTP
+
         res.status(200).json({ message: 'OTP envoyé à votre e-mail. Veuillez le saisir.' });
     } catch (error) {
         console.error("Erreur lors de la connexion :", error);
         res.status(500).json({ message: 'Erreur lors de la connexion.' });
+    }
+};
+exports.verifyOtp = async (req, res) => {
+    const { email, otp } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+        
+        // Log the user and OTP for debugging
+        console.log("User found:", user);
+        console.log("Provided OTP:", otp);
+        console.log("Stored OTP:", user.otp);
+        
+        if (!user || user.otp !== otp) {
+            return res.status(400).json({ message: 'OTP invalide ou utilisateur non trouvé.' });
+        }
+
+        if (user.otpExpires < Date.now()) {
+            return res.status(400).json({ message: 'OTP expiré.' });
+        }
+
+        // Authenticate user and generate JWT
+        const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        user.otp = null; // Reset OTP
+        user.otpExpires = null; // Reset OTP expiration
+        await user.save();
+
+        res.status(200).json({ message: 'Connexion réussie.', token });
+    } catch (error) {
+        console.error("Erreur lors de la vérification de l'OTP :", error);
+        res.status(500).json({ message: 'Erreur lors de la vérification de l’OTP.' });
     }
 };
