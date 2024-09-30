@@ -206,3 +206,29 @@ exports.forgetPassword = async (req, res) => {
         res.status(500).json({ message: 'Erreur lors de la réinitialisation du mot de passe.' });
     }
 };
+
+
+// Reset Password Function
+exports.resetPassword = async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user || user.otp !== otp || user.otpExpires < Date.now()) {
+            return res.status(400).json({ message: 'OTP invalide ou expiré.' });
+        }
+
+        // Hacher le nouveau mot de passe
+        const hashedPassword = await bcryptjs.hash(newPassword, 10);
+        user.password = hashedPassword;
+        user.otp = null;
+        user.otpExpires = null;
+        await user.save();
+
+        res.status(200).json({ message: 'Mot de passe réinitialisé avec succès.' });
+    } catch (error) {
+        console.error("Erreur lors de la réinitialisation du mot de passe :", error);
+        res.status(500).json({ message: 'Erreur lors de la réinitialisation du mot de passe.' });
+    }
+};
