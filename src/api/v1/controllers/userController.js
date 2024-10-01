@@ -176,3 +176,33 @@ exports.verifyOtp = async (req, res) => {
         res.status(500).json({ message: 'Erreur lors de la vérification de l’OTP.' });
     }
 };
+
+
+
+
+// Forget Password Function
+exports.forgetPassword = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Utilisateur non trouvé.' });
+        }
+
+        // Générer un OTP pour la réinitialisation
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        user.otp = otp;
+        user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes d'expiration
+        await user.save();
+
+        // Envoyer l'OTP par e-mail
+        await sendOtpEmail(user, otp);
+
+        res.status(200).json({ message: 'Un OTP a été envoyé à votre e-mail pour réinitialiser le mot de passe.' });
+    } catch (error) {
+        console.error("Erreur lors de la réinitialisation du mot de passe :", error);
+        res.status(500).json({ message: 'Erreur lors de la réinitialisation du mot de passe.' });
+    }
+};
