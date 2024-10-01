@@ -151,26 +151,26 @@ exports.verifyOtp = async (req, res) => {
     try {
         const user = await User.findOne({ email });
         
-        // Log the user and OTP for debugging
-        console.log("User found:", user);
-        console.log("Provided OTP:", otp);
-        console.log("Stored OTP:", user.otp);
-        
+        // Vérification de l'existence de l'utilisateur et de l'OTP
         if (!user || user.otp !== otp) {
             return res.status(400).json({ message: 'OTP invalide ou utilisateur non trouvé.' });
         }
 
+        // Vérification de l'expiration de l'OTP
         if (user.otpExpires < Date.now()) {
             return res.status(400).json({ message: 'OTP expiré.' });
         }
 
-        // Authenticate user and generate JWT
+        // Authentification réussie, génération du token JWT
         const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        user.otp = null; // Reset OTP
-        user.otpExpires = null; // Reset OTP expiration
+        
+        // Réinitialisation de l'OTP et de son expiration
+        user.otp = null; 
+        user.otpExpires = null; 
         await user.save();
 
-        res.status(200).json({ message: 'Connexion réussie.', token });
+        // Réponse en cas de succès
+        res.status(200).json({ message: 'Authentifié avec succès', token });
     } catch (error) {
         console.error("Erreur lors de la vérification de l'OTP :", error);
         res.status(500).json({ message: 'Erreur lors de la vérification de l’OTP.' });
