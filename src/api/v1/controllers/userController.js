@@ -53,16 +53,13 @@ exports.registerUser = async (req, res) => {
     const { name, email, password, phoneNumber, address, role } = req.body;
 
     try {
-        // Check if the user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: 'Email déjà utilisé !' });
         }
 
-        // Hash the password
         const hashedPassword = await bcryptjs.hash(password, 10);
 
-        // Create a new user
         const newUser = new User({
             name,
             email,
@@ -72,48 +69,49 @@ exports.registerUser = async (req, res) => {
             role,
         });
 
-        await newUser.save(); // Save the new user to the database
+        await newUser.save();
 
-        // Send verification email
-        await sendVerificationEmail(newUser); // Ensure this function is called
+        await sendVerificationEmail(newUser);
 
-        // Generate a JWT token
         const token = jwt.sign(
             { id: newUser._id, email: newUser.email },
             process.env.JWT_SECRET, 
-            { expiresIn: '1h' } // Token expiration
+            { expiresIn: '1h' }
         );
 
         res.status(201).json({ message: 'Utilisateur créé avec succès.', token });
     } catch (error) {
-        console.error("Error during user creation:", error); // Log the full error message
+        console.error("Error during user creation:", error);
         res.status(500).json({ message: 'Erreur lors de la création de l’utilisateur.', error: error.message });
     }      
 };
+
 
 // Email Verification Function
 exports.verifyEmail = async (req, res) => {
     const { token } = req.params;
 
     try {
-        // Check if a user with this verification token exists
+        // Chercher l'utilisateur par le token de vérification
         const user = await User.findOne({ verificationToken: token });
 
         if (!user) {
             return res.status(404).json({ message: 'Token de vérification invalide ou expiré.' });
         }
 
-        // Activate the user
-        user.isVerified = true; 
-        user.verificationToken = undefined; // Clear the verification token
-        await user.save(); // Save the updated user
+        // Activer l'utilisateur
+        user.isVerified = true;
+        user.verificationToken = undefined; 
+        await user.save(); 
 
         res.status(200).json({ message: 'E-mail vérifié avec succès !' });
+        return res.redirect('http://localhost:5173/login'); 
     } catch (error) {
         console.error("Erreur lors de la vérification de l'e-mail:", error); 
         res.status(500).json({ message: 'Erreur lors de la vérification de l’e-mail.', error: error.message });
     }
 };
+
 
 
 // Login User Function
