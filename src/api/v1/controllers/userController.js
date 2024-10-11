@@ -129,18 +129,36 @@ exports.loginUser = async (req, res) => {
             return res.status(400).json({ message: 'Identifiants invalides.' });
         }
 
+        // Check if OTP is expired and send a new one if needed
+        if (user.otpExpires && user.otpExpires < Date.now()) {
+            // Generate new OTP
+            const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
+            user.otp = otp; 
+            user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
+            
+            await user.save();  // Save the new OTP and its expiration
+            await sendOtpEmail(user, otp);  // Send the OTP by email
+            
+            return res.status(200).json({ 
+                message: 'OTP expiré, un nouveau OTP a été envoyé.', 
+                user: { id: user._id, email: user.email, isVerified: user.isVerified },
+                token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' }) 
+            });
+        }
+
+        // Generate new OTP if it does not exist
         const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
         user.otp = otp; 
         user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
         
-        await user.save();  // Sauvegarder l'OTP et son expiration dans la base de données
-        await sendOtpEmail(user, otp);  // Envoyer l'OTP par e-mail
+        await user.save();  // Save the OTP and its expiration
+        await sendOtpEmail(user, otp);  // Send the OTP by email
         
-        // Envoyer la réponse au client
+        // Send response to client
         res.status(200).json({ 
             message: 'Connexion réussie, OTP envoyé.', 
             user: { id: user._id, email: user.email, isVerified: user.isVerified },
-            token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' })  // Génération du token JWT
+            token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' }) 
         });
         
     } catch (error) {
@@ -149,45 +167,37 @@ exports.loginUser = async (req, res) => {
     }
 };
 
-
-
-
+// Verify OTP Function
 exports.verifyOtp = async (req, res) => {
-    console.log('Données reçues :', req.body); // Ajouter ceci pour voir les données reçues par le serveur
-  
     const { email, otp } = req.body;
-  
+
     if (!email || !otp) {
-      return res.status(400).json({ message: 'Email ou OTP manquant.' });
+        return res.status(400).json({ message: 'Email ou OTP manquant.' });
     }
 
     try {
-        // Vérification de l'existence de l'utilisateur
         const user = await User.findOne({ email });
 
         if (!user) {
             return res.status(400).json({ message: 'Utilisateur non trouvé.' });
         }
 
-        // Vérification de l'OTP
         if (user.otp !== otp) {
             return res.status(400).json({ message: 'OTP invalide.' });
         }
-
-        // Vérification de l'expiration de l'OTP
         if (user.otpExpires < Date.now()) {
-            return res.status(400).json({ message: 'OTP expiré.' });
-        }
+            return res.status(400).json({ message: 'OTP expiré. Veuillez demander un nouvel OTP.' });
+        }        
 
-        // Authentification réussie, génération du token JWT
+        // Authentication successful, generate JWT token
         const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
         
-        // Réinitialisation de l'OTP et de son expiration dans la base de données
+        // Reset OTP and its expiration in the database
         user.otp = null; 
         user.otpExpires = null; 
         await user.save();
 
-        // Réponse avec succès
+        // Response success
         res.status(200).json({ message: 'Authentifié avec succès', token });
     } catch (error) {
         console.error("Erreur lors de la vérification de l'OTP :", error);
@@ -195,6 +205,31 @@ exports.verifyOtp = async (req, res) => {
     }
 };
 
+// New function to resend OTP
+exports.resendOtp = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user || !user.isVerified) {
+            return res.status(400).json({ message: 'Utilisateur non trouvé ou non vérifié.' });
+        }
+
+        // Generate new OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        user.otp = otp;
+        user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
+        
+        await user.save();
+        await sendOtpEmail(user, otp); // Send the OTP by email
+
+        res.status(200).json({ message: 'Un nouvel OTP a été envoyé.' });
+    } catch (error) {
+        console.error("Erreur lors de l'envoi de l'OTP :", error);
+        res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'OTP.' });
+    }
+};
 
 
 
