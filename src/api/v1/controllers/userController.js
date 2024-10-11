@@ -87,7 +87,6 @@ exports.registerUser = async (req, res) => {
 };
 
 
-// Email Verification Function
 exports.verifyEmail = async (req, res) => {
     const { token } = req.params;
 
@@ -104,7 +103,6 @@ exports.verifyEmail = async (req, res) => {
         user.verificationToken = undefined; 
         await user.save(); 
 
-        res.status(200).json({ message: 'E-mail vérifié avec succès !' });
         return res.redirect('http://localhost:5173/login'); 
     } catch (error) {
         console.error("Erreur lors de la vérification de l'e-mail:", error); 
@@ -120,38 +118,60 @@ exports.loginUser = async (req, res) => {
 
     try {
         const user = await User.findOne({ email });
+
         if (!user || !user.isVerified) {
             return res.status(400).json({ message: 'Utilisateur non trouvé ou non vérifié.' });
         }
 
         const isMatch = await bcryptjs.compare(password, user.password);
+
         if (!isMatch) {
             return res.status(400).json({ message: 'Identifiants invalides.' });
         }
 
-        // Generate and send OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate a 6-digit OTP
-        user.otp = otp; // Store OTP in User model
-        user.otpExpires = Date.now() + 5 * 60 * 1000; // Set expiration time for OTP
-        await user.save();
-
-        await sendOtpEmail(user, otp); // Send email with OTP
-
-        res.status(200).json({ message: 'OTP envoyé à votre e-mail. Veuillez le saisir.' });
+        const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
+        user.otp = otp; 
+        user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
+        
+        await user.save();  // Sauvegarder l'OTP et son expiration dans la base de données
+        await sendOtpEmail(user, otp);  // Envoyer l'OTP par e-mail
+        
+        // Envoyer la réponse au client
+        res.status(200).json({ 
+            message: 'Connexion réussie, OTP envoyé.', 
+            user: { id: user._id, email: user.email, isVerified: user.isVerified },
+            token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' })  // Génération du token JWT
+        });
+        
     } catch (error) {
         console.error("Erreur lors de la connexion :", error);
         res.status(500).json({ message: 'Erreur lors de la connexion.' });
     }
 };
+
+
+
+
 exports.verifyOtp = async (req, res) => {
+    console.log('Données reçues :', req.body); // Ajouter ceci pour voir les données reçues par le serveur
+  
     const { email, otp } = req.body;
+  
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email ou OTP manquant.' });
+    }
 
     try {
+        // Vérification de l'existence de l'utilisateur
         const user = await User.findOne({ email });
-        
-        // Vérification de l'existence de l'utilisateur et de l'OTP
-        if (!user || user.otp !== otp) {
-            return res.status(400).json({ message: 'OTP invalide ou utilisateur non trouvé.' });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Utilisateur non trouvé.' });
+        }
+
+        // Vérification de l'OTP
+        if (user.otp !== otp) {
+            return res.status(400).json({ message: 'OTP invalide.' });
         }
 
         // Vérification de l'expiration de l'OTP
@@ -162,12 +182,12 @@ exports.verifyOtp = async (req, res) => {
         // Authentification réussie, génération du token JWT
         const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
         
-        // Réinitialisation de l'OTP et de son expiration
+        // Réinitialisation de l'OTP et de son expiration dans la base de données
         user.otp = null; 
         user.otpExpires = null; 
         await user.save();
 
-        // Réponse en cas de succès
+        // Réponse avec succès
         res.status(200).json({ message: 'Authentifié avec succès', token });
     } catch (error) {
         console.error("Erreur lors de la vérification de l'OTP :", error);
