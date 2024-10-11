@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 const sendVerificationEmail = async (user) => {
     const token = crypto.randomBytes(32).toString('hex'); 
     user.verificationToken = token; 
-    await user.save(); // Save the token to the user model
+    await user.save(); 
 
     const verificationUrl = `http://localhost:5000/api/v1/users/verify/${token}`;
     
