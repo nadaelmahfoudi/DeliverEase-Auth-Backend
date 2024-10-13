@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   verificationToken: { type: String },
   otp: {type: String,default: null,},
   otpExpires: {type: Date, default: null,},
-
+  isFirstLogin: { type: Boolean, default: true },
 });
 
 module.exports = mongoose.model('User', userSchema);

@@ -118,56 +118,57 @@ exports.loginUser = async (req, res) => {
 
     try {
         const user = await User.findOne({ email });
+        console.log("Utilisateur trouvé :", user); // Debug
 
-        if (!user || !user.isVerified) {
-            return res.status(400).json({ message: 'Utilisateur non trouvé ou non vérifié.' });
+        if (!user) {
+            return res.status(400).json({ message: 'Utilisateur non trouvé.' });
+        }
+
+        if (!user.isVerified) {
+            return res.status(400).json({ message: 'Utilisateur non vérifié.' });
         }
 
         const isMatch = await bcryptjs.compare(password, user.password);
-
         if (!isMatch) {
             return res.status(400).json({ message: 'Identifiants invalides.' });
         }
 
-        // Check if OTP is expired and send a new one if needed
-        if (user.otpExpires && user.otpExpires < Date.now()) {
-            // Generate new OTP
-            const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
-            user.otp = otp; 
-            user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
-            
-            await user.save();  // Save the new OTP and its expiration
-            await sendOtpEmail(user, otp);  // Send the OTP by email
-            
-            return res.status(200).json({ 
-                message: 'OTP expiré, un nouveau OTP a été envoyé.', 
-                user: { id: user._id, email: user.email, isVerified: user.isVerified },
-                token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' }) 
+        // Vérifiez le statut du premier login ou si l'OTP a expiré
+        if (user.isFirstLogin || (user.otpExpires && user.otpExpires < Date.now())) {
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            user.otp = otp;
+            user.otpExpires = Date.now() + 5 * 60 * 1000; // L'OTP expire dans 5 minutes
+            user.isFirstLogin = false; // Marquer comme non premier login
+
+            await user.save(); // Enregistrez les changements
+            await sendOtpEmail(user, otp);
+
+            return res.status(200).json({
+                message: 'Connexion réussie, OTP envoyé.',
+                user: { id: user._id, email: user.email, isVerified: user.isVerified, isFirstLogin: user.isFirstLogin },
+                // Pas de token ici, car vous devez vérifier l'OTP
+                requiresOtp: true // Indique que l'OTP est requis
             });
         }
 
-        // Generate new OTP if it does not exist
-        const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
-        user.otp = otp; 
-        user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP expire dans 5 minutes
-        
-        await user.save();  // Save the OTP and its expiration
-        await sendOtpEmail(user, otp);  // Send the OTP by email
-        
-        // Send response to client
-        res.status(200).json({ 
-            message: 'Connexion réussie, OTP envoyé.', 
-            user: { id: user._id, email: user.email, isVerified: user.isVerified },
-            token: jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' }) 
+        // Si l'utilisateur est déjà connecté et a un OTP valide
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+        return res.status(200).json({
+            message: 'Connexion réussie.',
+            user: { id: user._id, email: user.email, isVerified: user.isVerified, isFirstLogin: user.isFirstLogin },
+            token,
+            requiresOtp: false // Indique que l'OTP n'est pas requis
         });
-        
+
     } catch (error) {
         console.error("Erreur lors de la connexion :", error);
-        res.status(500).json({ message: 'Erreur lors de la connexion.' });
+        return res.status(500).json({ message: 'Erreur lors de la connexion.' });
     }
 };
 
-// Verify OTP Function
+
+// Vérification de l'OTP
 exports.verifyOtp = async (req, res) => {
     const { email, otp } = req.body;
 
@@ -189,21 +190,23 @@ exports.verifyOtp = async (req, res) => {
             return res.status(400).json({ message: 'OTP expiré. Veuillez demander un nouvel OTP.' });
         }        
 
-        // Authentication successful, generate JWT token
+        // Authentification réussie, générez le token JWT
         const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
         
-        // Reset OTP and its expiration in the database
+        // Réinitialiser l'OTP et son expiration dans la base de données
         user.otp = null; 
         user.otpExpires = null; 
+        user.isFirstLogin = false;
         await user.save();
 
-        // Response success
+        // Réponse de succès
         res.status(200).json({ message: 'Authentifié avec succès', token });
     } catch (error) {
         console.error("Erreur lors de la vérification de l'OTP :", error);
         res.status(500).json({ message: 'Erreur lors de la vérification de l’OTP.' });
     }
 };
+
 
 // New function to resend OTP
 exports.resendOtp = async (req, res) => {
