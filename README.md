@@ -27,7 +27,7 @@ http://localhost:5000/api/v1/users
   - `role` (string, optional): The user's role (e.g., admin, user).
 
 - **Response**:
-  - **201 Created**: 
+  - **201 Created**:
     ```json
     {
       "message": "Utilisateur créé avec succès.",
@@ -81,7 +81,7 @@ http://localhost:5000/api/v1/users
 
 **POST** `/login`
 
-- **Description**: Authenticate the user and send an OTP to the registered email.
+- **Description**: Authenticate a user and return a JWT.
 - **Request Body**:
   - `email` (string, required): The user's email address.
   - `password` (string, required): The user's password.
@@ -90,7 +90,86 @@ http://localhost:5000/api/v1/users
   - **200 OK**:
     ```json
     {
-      "message": "OTP envoyé à votre e-mail. Veuillez le saisir."
+      "message": "Connexion réussie.",
+      "user": {
+        "id": "user_id",
+        "email": "user_email",
+        "isVerified": true,
+        "isFirstLogin": false
+      },
+      "token": "your_jwt_token",
+      "requiresOtp": false
+    }
+    ```
+  - **200 OK (Requires OTP)**:
+    ```json
+    {
+      "message": "Connexion réussie, OTP envoyé.",
+      "user": {
+        "id": "user_id",
+        "email": "user_email",
+        "isVerified": true,
+        "isFirstLogin": true
+      },
+      "requiresOtp": true
+    }
+    ```
+  - **400 Bad Request**:
+    ```json
+    {
+      "message": "Utilisateur non trouvé."
+    }
+    ```
+  - **500 Internal Server Error**:
+    ```json
+    {
+      "message": "Erreur lors de la connexion."
+    }
+    ```
+
+### 4. Verify OTP
+
+**POST** `/verify-otp`
+
+- **Description**: Verify the OTP sent to the user's email.
+- **Request Body**:
+  - `email` (string, required): The user's email address.
+  - `otp` (string, required): The OTP code.
+
+- **Response**:
+  - **200 OK**:
+    ```json
+    {
+      "message": "Authentifié avec succès.",
+      "token": "your_jwt_token"
+    }
+    ```
+  - **400 Bad Request**:
+    ```json
+    {
+      "message": "OTP invalide ou expiré."
+    }
+    ```
+  - **500 Internal Server Error**:
+    ```json
+    {
+      "message": "Erreur lors de la vérification de l’OTP."
+    }
+    ```
+
+### 5. Resend OTP
+
+**POST** `/resend-otp`
+
+- **Description**: Resend a new OTP to the user's email.
+- **Request Body**:
+  - `email` (string, required): The user's email address.
+
+- **Response**:
+  - **200 OK**:
+    ```json
+    {
+      "message": "Un nouvel OTP a été envoyé."
     }
     ```
   - **400 Bad Request**:
@@ -102,47 +181,15 @@ http://localhost:5000/api/v1/users
   - **500 Internal Server Error**:
     ```json
     {
-      "message": "Erreur lors de la connexion.",
-      "error": "error_message"
+      "message": "Erreur lors de l'envoi de l'OTP."
     }
     ```
 
-### 4. Verify OTP
-
-**POST** `/verify-otp`
-
-- **Description**: Verify the OTP sent to the user's email.
-- **Request Body**:
-  - `email` (string, required): The user's email address.
-  - `otp` (string, required): The OTP received via email.
-
-- **Response**:
-  - **200 OK**:
-    ```json
-    {
-      "message": "Authentifié avec succès",
-      "token": "your_jwt_token"
-    }
-    ```
-  - **400 Bad Request**:
-    ```json
-    {
-      "message": "OTP invalide ou utilisateur non trouvé."
-    }
-    ```
-  - **500 Internal Server Error**:
-    ```json
-    {
-      "message": "Erreur lors de la vérification de l’OTP.",
-      "error": "error_message"
-    }
-    ```
-
-### 5. Forget Password
+### 6. Forget Password
 
 **POST** `/forget-password`
 
-- **Description**: Send an OTP to the user's email for password recovery.
+- **Description**: Send an OTP to the user's email for password reset.
 - **Request Body**:
   - `email` (string, required): The user's email address.
 
@@ -162,19 +209,18 @@ http://localhost:5000/api/v1/users
   - **500 Internal Server Error**:
     ```json
     {
-      "message": "Erreur lors de la réinitialisation du mot de passe.",
-      "error": "error_message"
+      "message": "Erreur lors de la réinitialisation du mot de passe."
     }
     ```
 
-### 6. Reset Password
+### 7. Reset Password
 
 **POST** `/reset-password`
 
 - **Description**: Reset the user's password using the OTP.
 - **Request Body**:
   - `email` (string, required): The user's email address.
-  - `otp` (string, required): The OTP received via email.
+  - `otp` (string, required): The OTP sent to the email.
   - `newPassword` (string, required): The new password.
 
 - **Response**:
@@ -193,25 +239,44 @@ http://localhost:5000/api/v1/users
   - **500 Internal Server Error**:
     ```json
     {
-      "message": "Erreur lors de la réinitialisation du mot de passe.",
-      "error": "error_message"
+      "message": "Erreur lors de la réinitialisation du mot de passe."
     }
     ```
 
-## Error Handling
-
-All error responses will include a message and, when applicable, an error detail. The status codes used include:
-- **400 Bad Request**: Client-side errors, such as invalid data or requests.
-- **404 Not Found**: Resource not found, such as an invalid verification token.
-- **500 Internal Server Error**: Server-side errors.
+---
 
 ## Environment Variables
 
-Make sure to set the following environment variables in your `.env` file:
+- `EMAIL_USER`: The email address used to send emails.
+- `EMAIL_PASS`: The password for the email address.
+- `JWT_SECRET`: The secret key for signing JWT tokens.
+- `PORT`: The port on which the server runs.
 
-EMAIL_USER=your_email@gmail.com 
-EMAIL_PASS=your_email_password 
-JWT_SECRET=your_jwt_secret
+---
+
+## Error Handling
+
+All errors are returned in the following format:
+```json
+{
+  "message": "Description of the error.",
+  "error": "Detailed error message (if available)."
+}
+
+### Installation
+
+1. Clone the repository.
+   ```bash
+   git clone https://github.com/your-username/DeliverEase-Auth-Backend.git
+2. Navigate into the project directory.
+   ```bash
+   cd DeliverEase-Auth-Backend
+3. Install dependencies using:
+   ```bash
+   npm install
+4. Run the server:
+   ```bash
+   npm start
 
 
 ## Conclusion
