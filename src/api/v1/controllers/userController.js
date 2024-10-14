@@ -14,6 +14,8 @@ const transporter = nodemailer.createTransport({
     },
 });
 
+
+
 // Function to send verification email
 const sendVerificationEmail = async (user) => {
     const token = crypto.randomBytes(32).toString('hex'); 
